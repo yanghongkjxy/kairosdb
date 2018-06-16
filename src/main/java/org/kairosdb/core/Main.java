@@ -17,14 +17,19 @@ package org.kairosdb.core;
 
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.Appender;
 import ch.qos.logback.core.filter.Filter;
 import ch.qos.logback.core.spi.FilterReply;
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
-import com.google.gson.Gson;
-import com.google.inject.*;
-import com.google.inject.util.Modules;
 import com.google.common.io.Files;
+import com.google.gson.Gson;
+import com.google.inject.Binding;
+import com.google.inject.Guice;
+import com.google.inject.Injector;
+import com.google.inject.Key;
+import com.google.inject.Module;
+import com.google.inject.util.Modules;
 import org.h2.util.StringUtils;
 import org.json.JSONException;
 import org.json.JSONWriter;
@@ -36,17 +41,42 @@ import org.kairosdb.core.exception.DatastoreException;
 import org.kairosdb.core.exception.KairosDBException;
 import org.kairosdb.core.http.rest.json.DataPointsParser;
 import org.kairosdb.core.http.rest.json.ValidationErrors;
+import org.kairosdb.eventbus.FilterEventBus;
+import org.kairosdb.eventbus.Publisher;
+import org.kairosdb.events.DataPointEvent;
+import org.kairosdb.events.ShutdownEvent;
 import org.kairosdb.util.PluginClassLoader;
 import org.slf4j.LoggerFactory;
 import org.slf4j.bridge.SLF4JBridgeHandler;
 
-import java.io.*;
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.FilenameFilter;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
+import java.io.PrintWriter;
+import java.io.StringReader;
+import java.io.Writer;
 import java.lang.reflect.Constructor;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.charset.Charset;
-import java.util.*;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Set;
+import java.util.SortedMap;
+import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class Main
 {
@@ -55,6 +85,8 @@ public class Main
 	public static final Charset UTF_8 = Charset.forName("UTF-8");
 	public static final String SERVICE_PREFIX = "kairosdb.service.";
 	public static final String SERVICE_FOLDER_PREFIX = "kairosdb.service_folder.";
+	public static final String KAIROSDB_SERVER_GUID = "kairosdb.server.guid";
+	private static final String GUID_PROPERTIES_FILENAME = "kairosdb_guid.properties";
 
 	private final static CountDownLatch s_shutdownObject = new CountDownLatch(1);
 
@@ -170,7 +202,23 @@ public class Main
 			loadPlugins(props, propertiesFile);
 		}
 
+		for (String name : System.getProperties().stringPropertyNames())
+		{
+			props.setProperty(name, System.getProperty(name));
+		}
+
 		applyEnvironmentVariables(props);
+
+		// Create guid for this server
+		if (!props.containsKey(KAIROSDB_SERVER_GUID)) {
+			String guid = UUID.randomUUID().toString();
+			props.put(KAIROSDB_SERVER_GUID, guid);
+
+			if (propertiesFile != null) {
+				Path path = Paths.get(propertiesFile.getAbsoluteFile().getParent(), GUID_PROPERTIES_FILENAME);
+				java.nio.file.Files.write(path, (KAIROSDB_SERVER_GUID + "=" + guid).getBytes(Charset.forName("UTF-8")));
+			}
+		}
 
 		List<Module> moduleList = new ArrayList<Module>();
 		moduleList.add(new CoreModule(props));
@@ -182,7 +230,7 @@ public class Main
 				Class<?> aClass;
 				try
 				{
-					if ("".equals(props.getProperty(propName)))
+					if ("".equals(props.getProperty(propName)) || "<disabled>".equals(props.getProperty(propName)))
 						continue;
 
 					String serviceName = propName.substring(SERVICE_PREFIX.length());
@@ -190,6 +238,12 @@ public class Main
 					String pluginFolder = props.getProperty(SERVICE_FOLDER_PREFIX + serviceName);
 
 					ClassLoader pluginLoader = this.getClass().getClassLoader();
+
+					/*
+					Check to see if a folder for the plugin exists.  If it does we
+					create a new class loader for the plugin's jars, this isolates
+					dependencies.
+					 */
 					if (pluginFolder != null)
 					{
 						pluginLoader = new PluginClassLoader(getJarsInPath(pluginFolder), pluginLoader);
@@ -266,14 +320,18 @@ public class Main
 		{
 			//Turn off console logging
 			Logger root = (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
-			root.getAppender("stdout").addFilter(new Filter<ILoggingEvent>()
+			Appender<ILoggingEvent> stdout = root.getAppender("stdout");
+			if (stdout != null)
 			{
-				@Override
-				public FilterReply decide(ILoggingEvent iLoggingEvent)
+				stdout.addFilter(new Filter<ILoggingEvent>()
 				{
-					return (FilterReply.DENY);
-				}
-			});
+					@Override
+					public FilterReply decide(ILoggingEvent iLoggingEvent)
+					{
+						return (FilterReply.DENY);
+					}
+				});
+			}
 		}
 
 		File propertiesFile = null;
@@ -291,6 +349,7 @@ public class Main
 				main.runExport(ps, arguments.exportMetricNames);
 				ps.flush();
 				ps.close();
+				System.out.println("Export finished");
 			}
 			else
 			{
@@ -300,6 +359,7 @@ public class Main
 			}
 
 			main.stopServices();
+			System.out.println("All done");
 		}
 		else if (arguments.operationCommand.equals("import"))
 		{
@@ -313,8 +373,11 @@ public class Main
 			{
 				main.runImport(System.in);
 			}
+			System.out.println("Import finished");
+			Thread.sleep(10000);
 
 			main.stopServices();
+			System.out.println("All done");
 		}
 		else if (arguments.operationCommand.equals("run") || arguments.operationCommand.equals("start"))
 		{
@@ -407,7 +470,7 @@ public class Main
 			if (metricNames != null && metricNames.size() > 0)
 				metrics = metricNames;
 			else
-				metrics = ds.getMetricNames();
+				metrics = ds.getMetricNames(null);
 
 			for (String metric : metrics)
 			{
@@ -433,6 +496,8 @@ public class Main
 	public void runImport(InputStream in) throws IOException, DatastoreException
 	{
 		KairosDatastore ds = m_injector.getInstance(KairosDatastore.class);
+		FilterEventBus eventBus = m_injector.getInstance(FilterEventBus.class);
+		Publisher<DataPointEvent> publisher = eventBus.createPublisher(DataPointEvent.class);
 		KairosDataPointFactory dpFactory = m_injector.getInstance(KairosDataPointFactory.class);
 
 		BufferedReader reader = new BufferedReader(new InputStreamReader(in, UTF_8));
@@ -441,7 +506,7 @@ public class Main
 		String line;
 		while ((line = reader.readLine()) != null)
 		{
-			DataPointsParser dataPointsParser = new DataPointsParser(ds, new StringReader(line),
+			DataPointsParser dataPointsParser = new DataPointsParser(publisher, new StringReader(line),
 					gson, dpFactory);
 
 			ValidationErrors validationErrors = dataPointsParser.parse();
@@ -511,6 +576,9 @@ public class Main
 		//Stop the datastore
 		KairosDatastore ds = m_injector.getInstance(KairosDatastore.class);
 		ds.close();
+
+		FilterEventBus eventBus = m_injector.getInstance(FilterEventBus.class);
+		eventBus.createPublisher(ShutdownEvent.class).post(new ShutdownEvent());
 	}
 
 	private static class RecoveryFile
@@ -564,6 +632,7 @@ public class Main
 		private final Writer m_writer;
 		private JSONWriter m_jsonWriter;
 		private final String m_metric;
+		private final ReentrantReadWriteLock m_lock = new ReentrantReadWriteLock();
 
 		public ExportQueryCallback(String metricName, Writer out)
 		{
@@ -571,27 +640,10 @@ public class Main
 			m_writer = out;
 		}
 
-
 		@Override
-		public void addDataPoint(DataPoint datapoint) throws IOException
+		public DataPointWriter startDataPointSet(String type, SortedMap<String, String> tags) throws IOException
 		{
-			try
-			{
-				m_jsonWriter.array().value(datapoint.getTimestamp());
-				datapoint.writeValueToJson(m_jsonWriter);
-				m_jsonWriter.value(datapoint.getApiDataType()).endArray();
-			}
-			catch (JSONException e)
-			{
-				throw new IOException(e);
-			}
-		}
-
-		@Override
-		public void startDataPointSet(String type, Map<String, String> tags) throws IOException
-		{
-			if (m_jsonWriter != null)
-				endDataPoints();
+			m_lock.writeLock().lock();
 
 			try
 			{
@@ -607,25 +659,49 @@ public class Main
 			{
 				throw new IOException(e);
 			}
+
+			return new ExportDataPointWriter();
 		}
 
-		@Override
-		public void endDataPoints() throws IOException
+		private class ExportDataPointWriter implements DataPointWriter
 		{
-			try
+
+			@Override
+			public void addDataPoint(DataPoint datapoint) throws IOException
 			{
-				if (m_jsonWriter != null)
+				try
 				{
-					m_jsonWriter.endArray().endObject();
-					m_writer.write("\n");
-					m_jsonWriter = null;
+					m_jsonWriter.array().value(datapoint.getTimestamp());
+					datapoint.writeValueToJson(m_jsonWriter);
+					m_jsonWriter.value(datapoint.getApiDataType()).endArray();
+				}
+				catch (JSONException e)
+				{
+					throw new IOException(e);
 				}
 			}
-			catch (JSONException e)
-			{
-				throw new IOException(e);
-			}
 
+			@Override
+			public void close() throws IOException
+			{
+				try
+				{
+					if (m_jsonWriter != null)
+					{
+						m_jsonWriter.endArray().endObject();
+						m_writer.write("\n");
+						m_jsonWriter = null;
+					}
+				}
+				catch (JSONException e)
+				{
+					throw new IOException(e);
+				}
+				finally
+				{
+					m_lock.writeLock().unlock();
+				}
+			}
 		}
 	}
 

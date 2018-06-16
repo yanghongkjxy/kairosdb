@@ -3,27 +3,31 @@ package org.kairosdb.core.health;
 import org.hamcrest.CoreMatchers;
 import org.junit.Before;
 import org.junit.Test;
-import org.kairosdb.core.datastore.Datastore;
+import org.kairosdb.core.datastore.DatastoreQuery;
+import org.kairosdb.core.datastore.KairosDatastore;
+import org.kairosdb.core.datastore.QueryMetric;
 import org.kairosdb.core.exception.DatastoreException;
-
-import java.util.Collections;
 
 import static com.codahale.metrics.health.HealthCheck.Result;
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.junit.Assert.*;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 public class DatastoreQueryHealthCheckTest
 {
-	private Datastore datastore;
+	private KairosDatastore datastore;
+	private DatastoreQuery query;
 	private DatastoreQueryHealthCheck healthCheck;
 
 	@Before
 	public void setup() throws DatastoreException
 	{
-		datastore = mock(Datastore.class);
-		when(datastore.getMetricNames()).thenReturn(Collections.<String>emptyList());
+		datastore = mock(KairosDatastore.class);
+		query = mock(DatastoreQuery.class);
+		//when(datastore.getMetricNames()).thenReturn(Collections.<String>emptyList());
+		when(datastore.createQuery(any(QueryMetric.class))).thenReturn(query);
 
 		healthCheck = new DatastoreQueryHealthCheck(datastore);
 	}
@@ -46,7 +50,7 @@ public class DatastoreQueryHealthCheckTest
 	public void testCheckUnHealthy() throws Exception
 	{
 		Exception exception = new DatastoreException("Error message");
-		when(datastore.getMetricNames()).thenThrow(exception);
+		when(query.execute()).thenThrow(exception);
 
 		Result result = healthCheck.check();
 

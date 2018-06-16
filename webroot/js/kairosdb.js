@@ -98,22 +98,13 @@ kairosdb.Metric = function (name) {
 		return this;
 	};
 
-	this.addPercentile = function (value, unit, percent, time_zone, align_start_time) {
+	this.addPercentile = function (value, unit, percent, time_zone, align) {
 		if (!this.aggregators)
 			this.aggregators = [];
 
-		var percentile = {};
-		percentile.name = "percentile";
+		var percentile = this.addRangeAggregator("percentile", value, unit, time_zone, align);
 		percentile.percentile = percent;
-		if (unit) {
-			percentile.sampling = {};
-			percentile.sampling.unit = unit;
-			percentile.sampling.value = value;
-			percentile.sampling.time_zone = time_zone;
-			percentile.align_start_time = align_start_time;
-		}
 
-		this.aggregators.push(percentile);
 		return this;
 	};
 
@@ -162,24 +153,25 @@ kairosdb.Metric = function (name) {
 		return aggregator;
 	};
 
-	this.addRangeAggregator = function (name, value, unit, time_zone, align_start_time) {
+	this.addRangeAggregator = function (name, value, unit, time_zone, align) {
 		if (!this.aggregators)
 			this.aggregators = [];
 
 		var aggregator = {};
 		aggregator.name = name;
-		aggregator.align_sampling = true;
 
 		if (value && unit) {
 			aggregator.sampling = {};
 			aggregator.sampling.value = value;
 			aggregator.sampling.unit = unit;
 			aggregator.sampling.time_zone = time_zone;
-			aggregator.align_start_time = align_start_time;
+			if (align == "sample") aggregator.align_sampling = true;
+			if (align == "start") aggregator.align_start_time = true;
+			if (align == "end") aggregator.align_end_time = true;
 		}
 
 		this.aggregators.push(aggregator);
-		return this;
+		return aggregator;
 	};
 
 	this.addScaleAggregator = function (scalingFactor) {
@@ -254,6 +246,7 @@ kairosdb.BinGroupBy = function (groupSize) {
  */
 kairosdb.MetricQuery = function (cacheTime) {
 	this.metrics = [];
+	this.plugins = [];
 	this.cache_time = 0;
 	if (cacheTime != undefined)
 		this.cache_time = cacheTime;
@@ -303,6 +296,16 @@ kairosdb.MetricQuery = function (cacheTime) {
 	this.setTimeZone = function (timeZone) {
 		this.time_zone = timeZone;
 	}
+
+	/**
+
+	 */
+	/*this.setPostScript = function (postScript) {
+		var plugin = {};
+		plugin.name = 'kairos_script';
+		plugin.script = postScript;
+		this.plugins.push(plugin);
+	}*/
 
 	/**
 	 Used to add a kairos.Metric object to the MetricQuery

@@ -25,11 +25,28 @@ import org.kairosdb.util.StringPool;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.*;
-import java.util.*;
+import java.io.DataInputStream;
+import java.io.Externalizable;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.ObjectInput;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutput;
+import java.io.ObjectOutputStream;
+import java.io.RandomAccessFile;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.SortedMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-public class CachedSearchResult implements QueryCallback
+public class CachedSearchResult implements SearchResult
 {
 	public static final Logger logger = LoggerFactory.getLogger(CachedSearchResult.class);
 
@@ -40,6 +57,7 @@ public class CachedSearchResult implements QueryCallback
 
 	private final String m_metricName;
 	private final List<FilePositionMarker> m_dataPointSets;
+	private final MemoryMonitor m_memoryMonitor;
 	private FilePositionMarker m_currentFilePositionMarker;
 	private final File m_dataFile;
 	private RandomAccessFile m_randomAccessFile;
@@ -52,6 +70,7 @@ public class CachedSearchResult implements QueryCallback
 	private final StringPool m_stringPool;
 	private int m_maxReadBufferSize = 8192;  //Default value in BufferedInputStream
 	private boolean m_keepCacheFiles;
+	private final ReentrantReadWriteLock m_lock = new ReentrantReadWriteLock();
 
 
 	private static File getIndexFile(String baseFileName)
@@ -79,6 +98,7 @@ public class CachedSearchResult implements QueryCallback
 		m_dataPointFactory = datatPointFactory;
 		m_stringPool = new StringPool();
 		m_keepCacheFiles = keepCacheFiles;
+		m_memoryMonitor = new MemoryMonitor(1000);
 	}
 
 	private void openCacheFile() throws FileNotFoundException
@@ -197,23 +217,7 @@ public class CachedSearchResult implements QueryCallback
 		return (ret);
 	}
 
-	/**
-	 Call when finished adding datapoints to the cache file
-	 */
-	public void endDataPoints() throws IOException
-	{
-		if (m_randomAccessFile == null)
-			return;
 
-		//flushWriteBuffer();
-		m_dataOutputStream.flush();
-
-		long curPosition = m_dataOutputStream.getPosition();
-		if (m_dataPointSets.size() != 0)
-			m_dataPointSets.get(m_dataPointSets.size() -1).setEndPosition(curPosition);
-
-		calculateMaxReadBufferSize();
-	}
 
 	/**
 	 Closes the underling file handle
@@ -242,34 +246,7 @@ public class CachedSearchResult implements QueryCallback
 			close();
 	}
 
-
-	/**
-	 A new set of datapoints to write to the file.  This causes the start position
-	 of the set to be saved.  All inserted datapoints after this call are
-	 expected to be in ascending time order and have the same tags.
-	 */
-	public void startDataPointSet(String type, Map<String, String> tags) throws IOException
-	{
-		if (m_randomAccessFile == null)
-			openCacheFile();
-
-		endDataPoints();
-
-		long curPosition = m_dataOutputStream.getPosition();
-		m_currentFilePositionMarker = new FilePositionMarker(curPosition, tags, type);
-		m_dataPointSets.add(m_currentFilePositionMarker);
-	}
-
-
 	@Override
-	public void addDataPoint(DataPoint datapoint) throws IOException
-	{
-		m_dataOutputStream.writeLong(datapoint.getTimestamp());
-		datapoint.writeValueToBuffer(m_dataOutputStream);
-
-		m_currentFilePositionMarker.incrementDataPointCount();
-	}
-
 	public List<DataPointRow> getRows()
 	{
 		List<DataPointRow> ret = new ArrayList<DataPointRow>();
@@ -283,6 +260,82 @@ public class CachedSearchResult implements QueryCallback
 		}
 
 		return (ret);
+	}
+
+	/**
+	 A new set of datapoints to write to the file.  This causes the start position
+	 of the set to be saved.  All inserted datapoints after this call are
+	 expected to be in ascending time order and have the same tags.
+	 */
+	@Override
+	public DataPointWriter startDataPointSet(String type, SortedMap<String, String> tags) throws IOException
+	{
+		return new CachedDatapointWriter(type, tags);
+	}
+
+
+	private class CachedDatapointWriter implements DataPointWriter
+	{
+		private final String m_dataType;
+		private final Map<String, String> m_tags;
+		private final List<DataPoint> m_dataPoints;
+
+		public CachedDatapointWriter(String type, Map<String, String> tags)
+		{
+			m_dataType = type;
+			m_tags = tags;
+			m_dataPoints = new ArrayList<>();
+		}
+
+		@Override
+		public void addDataPoint(DataPoint datapoint) throws IOException
+		{
+			m_dataPoints.add(datapoint);
+			m_memoryMonitor.checkMemoryAndThrowException();
+		}
+
+		/**
+		 Call when finished adding datapoints to the cache file
+		 */
+		@Override
+		public void close() throws IOException
+		{
+			try
+			{
+				m_lock.writeLock().lock();
+
+				if (m_randomAccessFile == null)
+					openCacheFile();
+
+				long curPosition = m_dataOutputStream.getPosition();
+				m_currentFilePositionMarker = new FilePositionMarker(curPosition, m_tags, m_dataType);
+				m_dataPointSets.add(m_currentFilePositionMarker);
+
+
+				for (DataPoint dataPoint : m_dataPoints)
+				{
+					m_dataOutputStream.writeLong(dataPoint.getTimestamp());
+					dataPoint.writeValueToBuffer(m_dataOutputStream);
+
+					m_currentFilePositionMarker.incrementDataPointCount();
+				}
+
+
+				//flushWriteBuffer();
+				m_dataOutputStream.flush();
+
+				curPosition = m_dataOutputStream.getPosition();
+				if (m_dataPointSets.size() != 0)
+					m_dataPointSets.get(m_dataPointSets.size() - 1).setEndPosition(curPosition);
+
+				calculateMaxReadBufferSize();
+			}
+			finally
+			{
+				m_lock.writeLock().unlock();
+			}
+		}
+
 	}
 
 	//===========================================================================

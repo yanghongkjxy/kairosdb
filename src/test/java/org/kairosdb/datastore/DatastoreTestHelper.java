@@ -17,19 +17,32 @@
 package org.kairosdb.datastore;
 
 import com.google.common.collect.HashMultimap;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.SetMultimap;
 import com.google.common.collect.TreeMultimap;
 import org.junit.Test;
+import org.kairosdb.core.datapoints.DoubleDataPoint;
 import org.kairosdb.core.datapoints.LongDataPoint;
+import org.kairosdb.core.datapoints.StringDataPoint;
 import org.kairosdb.core.datastore.DataPointGroup;
 import org.kairosdb.core.datastore.DatastoreQuery;
 import org.kairosdb.core.datastore.KairosDatastore;
 import org.kairosdb.core.datastore.QueryMetric;
 import org.kairosdb.core.exception.DatastoreException;
 import org.kairosdb.core.groupby.TagGroupBy;
+import org.kairosdb.datastore.cassandra.CassandraDatastore;
+import org.kairosdb.eventbus.EventBusConfiguration;
+import org.kairosdb.eventbus.FilterEventBus;
+import org.kairosdb.eventbus.Publisher;
+import org.kairosdb.events.DataPointEvent;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.TreeMap;
 
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.hasItem;
@@ -41,6 +54,7 @@ import static org.junit.Assert.assertFalse;
 public abstract class DatastoreTestHelper
 {
 	protected static KairosDatastore s_datastore;
+	protected static FilterEventBus s_eventBus = new FilterEventBus(new EventBusConfiguration(new Properties()));
 	protected static final List<String> metricNames = new ArrayList<>();
 	private static long s_startTime;
 	private static String s_unicodeNameWithSpace = "你好 means hello";
@@ -86,11 +100,13 @@ public abstract class DatastoreTestHelper
 				.put("month", "April")
 				.build();
 
+		Publisher<DataPointEvent> publisher = s_eventBus.createPublisher(DataPointEvent.class);
+
 		s_startTime = System.currentTimeMillis();
-		s_datastore.putDataPoint(metricName, tags, new LongDataPoint(s_startTime, 1));
-		s_datastore.putDataPoint(metricName, tags, new LongDataPoint(s_startTime + 1000, 2));
-		s_datastore.putDataPoint(metricName, tags, new LongDataPoint(s_startTime + 2000, 3));
-		s_datastore.putDataPoint(metricName, tags, new LongDataPoint(s_startTime + 3000, 4));
+		publisher.post(new DataPointEvent(metricName, tags, new LongDataPoint(s_startTime, 1)));
+		publisher.post(new DataPointEvent(metricName, tags, new LongDataPoint(s_startTime + 1000, 2)));
+		publisher.post(new DataPointEvent(metricName, tags, new LongDataPoint(s_startTime + 2000, 3)));
+		publisher.post(new DataPointEvent(metricName, tags, new LongDataPoint(s_startTime + 3000, 4)));
 
 
 		tags = ImmutableSortedMap.<String, String>naturalOrder()
@@ -99,10 +115,10 @@ public abstract class DatastoreTestHelper
 				.put("month", "April")
 				.build();
 
-		s_datastore.putDataPoint(metricName, tags, new LongDataPoint(s_startTime, 5));
-		s_datastore.putDataPoint(metricName, tags, new LongDataPoint(s_startTime + 1000, 6));
-		s_datastore.putDataPoint(metricName, tags, new LongDataPoint(s_startTime + 2000, 7));
-		s_datastore.putDataPoint(metricName, tags, new LongDataPoint(s_startTime + 3000, 8));
+		publisher.post(new DataPointEvent(metricName, tags, new LongDataPoint(s_startTime, 5)));
+		publisher.post(new DataPointEvent(metricName, tags, new LongDataPoint(s_startTime + 1000, 6)));
+		publisher.post(new DataPointEvent(metricName, tags, new LongDataPoint(s_startTime + 2000, 7)));
+		publisher.post(new DataPointEvent(metricName, tags, new LongDataPoint(s_startTime + 3000, 8)));
 
 
 		tags = ImmutableSortedMap.<String, String>naturalOrder()
@@ -111,10 +127,10 @@ public abstract class DatastoreTestHelper
 				.put("month", "April")
 				.build();
 
-		s_datastore.putDataPoint(metricName, tags, new LongDataPoint(s_startTime, 9));
-		s_datastore.putDataPoint(metricName, tags, new LongDataPoint(s_startTime + 1000, 10));
-		s_datastore.putDataPoint(metricName, tags, new LongDataPoint(s_startTime + 2000, 11));
-		s_datastore.putDataPoint(metricName, tags, new LongDataPoint(s_startTime + 3000, 12));
+		publisher.post(new DataPointEvent(metricName, tags, new LongDataPoint(s_startTime, 9)));
+		publisher.post(new DataPointEvent(metricName, tags, new LongDataPoint(s_startTime + 1000, 10)));
+		publisher.post(new DataPointEvent(metricName, tags, new LongDataPoint(s_startTime + 2000, 11)));
+		publisher.post(new DataPointEvent(metricName, tags, new LongDataPoint(s_startTime + 3000, 12)));
 
 
 		metricNames.add("metric2");
@@ -125,10 +141,10 @@ public abstract class DatastoreTestHelper
 				.put("month", "April")
 				.build();
 
-		s_datastore.putDataPoint(metricName, tags, new LongDataPoint(s_startTime, 13));
-		s_datastore.putDataPoint(metricName, tags, new LongDataPoint(s_startTime + 1000, 14));
-		s_datastore.putDataPoint(metricName, tags, new LongDataPoint(s_startTime + 2000, 15));
-		s_datastore.putDataPoint(metricName, tags, new LongDataPoint(s_startTime + 3000, 16));
+		publisher.post(new DataPointEvent(metricName, tags, new LongDataPoint(s_startTime, 13)));
+		publisher.post(new DataPointEvent(metricName, tags, new LongDataPoint(s_startTime + 1000, 14)));
+		publisher.post(new DataPointEvent(metricName, tags, new LongDataPoint(s_startTime + 2000, 15)));
+		publisher.post(new DataPointEvent(metricName, tags, new LongDataPoint(s_startTime + 3000, 16)));
 
 
 		metricNames.add("duplicates");
@@ -137,9 +153,9 @@ public abstract class DatastoreTestHelper
 				.put("host", "A")
 				.build();
 
-		s_datastore.putDataPoint(metricName, tags, new LongDataPoint(s_startTime, 4));
+		publisher.post(new DataPointEvent(metricName, tags, new LongDataPoint(s_startTime, 4)));
 
-		s_datastore.putDataPoint(metricName, tags, new LongDataPoint(s_startTime, 42));
+		publisher.post(new DataPointEvent(metricName, tags, new LongDataPoint(s_startTime, 42)));
 
 
 		//Testing pre 1970 data points with negative values
@@ -148,11 +164,27 @@ public abstract class DatastoreTestHelper
 		tags = ImmutableSortedMap.<String, String>naturalOrder()
 				.put("host", "A").build();
 
-		s_datastore.putDataPoint(metricName, tags, new LongDataPoint(-2000000000L, 80));
-		s_datastore.putDataPoint(metricName, tags, new LongDataPoint(-1000000000L, 40));
-		s_datastore.putDataPoint(metricName, tags, new LongDataPoint(-100L, 20));
-		s_datastore.putDataPoint(metricName, tags, new LongDataPoint(0L, 3));
-		s_datastore.putDataPoint(metricName, tags, new LongDataPoint(2000000000L, 33));
+		publisher.post(new DataPointEvent(metricName, tags, new LongDataPoint(-2000000000L, 80)));
+		publisher.post(new DataPointEvent(metricName, tags, new LongDataPoint(-1000000000L, 40)));
+		publisher.post(new DataPointEvent(metricName, tags, new LongDataPoint(-100L, 20)));
+		publisher.post(new DataPointEvent(metricName, tags, new LongDataPoint(0L, 3)));
+		publisher.post(new DataPointEvent(metricName, tags, new LongDataPoint(2000000000L, 33)));
+
+		//Test string data
+		metricName = "string_data";
+		metricNames.add(metricName);
+		tags = ImmutableSortedMap.<String, String>naturalOrder()
+				.put("host", "A").build();
+
+		publisher.post(new DataPointEvent(metricName, tags, new StringDataPoint(s_startTime, "Hello")));
+
+		//Test unicode string data
+		metricName = "string_data_unicode";
+		metricNames.add(metricName);
+		tags = ImmutableSortedMap.<String, String>naturalOrder()
+				.put("host", "A").build();
+
+		publisher.post(new DataPointEvent(metricName, tags, new StringDataPoint(s_startTime, s_unicodeName)));
 
 
 		//Adding a metric with unicode and spaces
@@ -162,7 +194,7 @@ public abstract class DatastoreTestHelper
 				.put("host", s_unicodeName)
 				.put("space", "space is cool").build();
 
-		s_datastore.putDataPoint(metricName, tags, new LongDataPoint(s_startTime, 42));
+		publisher.post(new DataPointEvent(metricName, tags, new LongDataPoint(s_startTime, 42)));
 
 
 		//Data that will be deleted in test
@@ -171,13 +203,36 @@ public abstract class DatastoreTestHelper
 		tags = ImmutableSortedMap.<String, String>naturalOrder()
 				.put("ghost", "tag").build();
 
-		s_datastore.putDataPoint(metricName, tags, new LongDataPoint(s_startTime, 50));
+		publisher.post(new DataPointEvent(metricName, tags, new LongDataPoint(s_startTime, 50)));
+
+
+		metricName = "double_delete";
+		metricNames.add(metricName);
+		tags = ImmutableSortedMap.<String, String>naturalOrder()
+				.put("tag", "1").build();
+
+		publisher.post(new DataPointEvent(metricName, tags, new DoubleDataPoint(s_startTime, 100.1D)));
+
+		tags = ImmutableSortedMap.<String, String>naturalOrder()
+				.put("tag", "2").build();
+
+		publisher.post(new DataPointEvent(metricName, tags, new DoubleDataPoint(s_startTime, 100.1D)));
+
+
+		metricName = "delete_only_string";
+		metricNames.add(metricName);
+		tags = ImmutableSortedMap.<String, String>naturalOrder()
+				.put("tag", "1").build();
+
+		publisher.post(new DataPointEvent(metricName, tags, new StringDataPoint(s_startTime, "I'm Happy")));
+
+		publisher.post(new DataPointEvent(metricName, tags, new DoubleDataPoint(s_startTime, 100.1D)));
 	}
 
 	@Test
 	public void test_getMetricNames() throws DatastoreException
 	{
-		List<String> metrics = listFromIterable(s_datastore.getMetricNames());
+		List<String> metrics = listFromIterable(s_datastore.getMetricNames(null));
 
 		assertThat(metrics, hasItem("metric1"));
 		assertThat(metrics, hasItem("metric2"));
@@ -186,6 +241,17 @@ public abstract class DatastoreTestHelper
 	}
 
 	@Test
+	public void test_getMetricNames_with_prefix() throws DatastoreException
+	{
+		List<String> metrics = listFromIterable(s_datastore.getMetricNames("m"));
+
+		assertThat(metrics, hasItem("metric1"));
+		assertThat(metrics, hasItem("metric2"));
+		assertThat(metrics.size(), equalTo(2));
+	}
+
+	//names and values not being stored
+	/*@Test
 	public void test_getTagNames() throws DatastoreException
 	{
 		List<String> metrics = listFromIterable(s_datastore.getTagNames());
@@ -193,9 +259,9 @@ public abstract class DatastoreTestHelper
 		assertThat(metrics, hasItem("host"));
 		assertThat(metrics, hasItem("client"));
 		assertThat(metrics, hasItem("month"));
-	}
+	}*/
 
-	@Test
+	/*@Test
 	public void test_getTagValues() throws DatastoreException
 	{
 		List<String> metrics = listFromIterable(s_datastore.getTagValues());
@@ -205,6 +271,70 @@ public abstract class DatastoreTestHelper
 		assertThat(metrics, hasItem("foo"));
 		assertThat(metrics, hasItem("bar"));
 		assertThat(metrics, hasItem("April"));
+	}*/
+
+	@Test
+	public void test_queryDatabase_stringData() throws DatastoreException
+	{
+
+		Map<String, String> tags = new TreeMap<>();
+		QueryMetric query = new QueryMetric(s_startTime, 0, "string_data");
+		query.setEndTime(s_startTime + 3000);
+
+		query.setTags(tags);
+
+		DatastoreQuery dq = s_datastore.createQuery(query);
+
+		try
+		{
+			List<DataPointGroup> results = dq.execute();
+
+			assertThat(results.size(), equalTo(1));
+
+			DataPointGroup dpg = results.get(0);
+
+			assertThat(dpg.getName(), is("string_data"));
+
+			assertThat(dpg.hasNext(), is(true));
+			String actual = ((StringDataPoint)dpg.next()).getValue();
+			assertThat(actual, is("Hello"));
+		}
+		finally
+		{
+			dq.close();
+		}
+	}
+
+	@Test
+	public void test_queryDatabase_stringDataUnicode() throws DatastoreException
+	{
+
+		Map<String, String> tags = new TreeMap<>();
+		QueryMetric query = new QueryMetric(s_startTime, 0, "string_data_unicode");
+		query.setEndTime(s_startTime + 3000);
+
+		query.setTags(tags);
+
+		DatastoreQuery dq = s_datastore.createQuery(query);
+
+		try
+		{
+			List<DataPointGroup> results = dq.execute();
+
+			assertThat(results.size(), equalTo(1));
+
+			DataPointGroup dpg = results.get(0);
+
+			assertThat(dpg.getName(), is("string_data_unicode"));
+
+			assertThat(dpg.hasNext(), is(true));
+			String actual = ((StringDataPoint)dpg.next()).getValue();
+			assertThat(actual, is(s_unicodeName));
+		}
+		finally
+		{
+			dq.close();
+		}
 	}
 
 	@Test
@@ -247,6 +377,7 @@ public abstract class DatastoreTestHelper
 			dq.close();
 		}
 	}
+
 
 	@Test
 	public void test_queryDatabase_withTags() throws DatastoreException
@@ -702,6 +833,79 @@ public abstract class DatastoreTestHelper
 	}
 
 
+	@Test
+	public void test_deleteTimeWindowWithTag() throws DatastoreException, InterruptedException
+	{
+		QueryMetric query = new QueryMetric(s_startTime - CassandraDatastore.ROW_WIDTH, 0, "double_delete");
+		query.setTags(ImmutableMap.of("tag", "1"));
+		query.setEndTime(s_startTime + CassandraDatastore.ROW_WIDTH);
+
+		s_datastore.delete(query);
+
+		query = new QueryMetric(s_startTime, 0, "double_delete");
+		query.setEndTime(s_startTime + 1);
+
+		Thread.sleep(1500);
+		//Now query for the data
+		DatastoreQuery dq = s_datastore.createQuery(query);
+		try
+		{
+			List<DataPointGroup> results = dq.execute();
+
+			assertThat(results.size(), equalTo(1));
+
+			DataPointGroup dpg = results.get(0);
+			SetMultimap<String, String> resTags = extractTags(dpg);
+			assertThat("there is only one tag", resTags.size(), is(1));
+
+			assertThat("there is one data point", dpg.hasNext(), is(true));
+			dpg.next();
+			assertThat("there is only one data point", dpg.hasNext(), is(false));
+		}
+		finally
+		{
+			dq.close();
+		}
+	}
+
+
+	//Todo uncomment when we support deleting only a specific type of data.
+	/*@Test
+	public void test_deleteOnlyStringType() throws DatastoreException, InterruptedException
+	{
+		QueryMetric query = new QueryMetric(s_startTime - CassandraDatastore.ROW_WIDTH, 0, "delete_only_string");
+		query.setEndTime(s_startTime + CassandraDatastore.ROW_WIDTH);
+
+		s_datastore.delete(query);
+
+		Thread.sleep(1500);
+
+		query = new QueryMetric(s_startTime, 0, "delete_only_string");
+		query.setEndTime(s_startTime + 1);
+
+		//Now query for the data
+		DatastoreQuery dq = s_datastore.createQuery(query);
+		try
+		{
+			List<DataPointGroup> results = dq.execute();
+
+			assertThat(results.size(), equalTo(1));
+
+			DataPointGroup dpg = results.get(0);
+			SetMultimap<String, String> resTags = extractTags(dpg);
+			assertThat("there is only one tag", resTags.size(), is(1));
+
+			assertThat("there is one data point", dpg.hasNext(), is(true));
+			dpg.next();
+			assertThat("there is only one data point", dpg.hasNext(), is(false));
+		}
+		finally
+		{
+			dq.close();
+		}
+	}*/
+
+
 	private void assertValues(DataPointGroup group, long... values)
 	{
 		for (long expected : values)
@@ -713,6 +917,9 @@ public abstract class DatastoreTestHelper
 
 		assertThat(group.hasNext(), is(false));
 	}
+
+
+
 
 
 }

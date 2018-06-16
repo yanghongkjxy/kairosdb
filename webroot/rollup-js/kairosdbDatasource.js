@@ -2,6 +2,7 @@ var tagList = null;
 
 module.factory('KairosDBDatasource', function ($q, $http) {
 
+
 	function KairosDBDatasource() {
 	}
 
@@ -182,6 +183,9 @@ module.factory('KairosDBDatasource', function ($q, $http) {
 			if (target.samplingAlignStartTime) {
 				query.aggregators[0].align_start_time = true;
 			}
+			if (target.samplingAlignEndTime) {
+				query.aggregators[0].align_end_time = true;
+			}
 		}
 		if (target.horizontalAggregators) {
 			_.each(target.horizontalAggregators, function (chosenAggregator) {
@@ -323,7 +327,7 @@ module.factory('KairosDBDatasource', function ($q, $http) {
 	};
 
 	KairosDBDatasource.convertToShortTimeUnit = function (timeUnit) {
-		var unit = timeUnit.unit;
+    var unit = timeUnit.unit.toLowerCase();
 
 		switch (unit) {
 			case 'milliseconds':

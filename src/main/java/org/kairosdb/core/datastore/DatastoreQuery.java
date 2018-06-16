@@ -21,7 +21,7 @@ import org.kairosdb.core.exception.DatastoreException;
 import java.util.List;
 
 
-public interface DatastoreQuery
+public interface DatastoreQuery extends AutoCloseable
 {
 
 	public List<DataPointGroup> execute() throws DatastoreException;

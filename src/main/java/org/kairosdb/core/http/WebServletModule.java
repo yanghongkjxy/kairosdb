@@ -22,6 +22,9 @@ import com.google.inject.servlet.GuiceFilter;
 import com.sun.jersey.guice.JerseyServletModule;
 import com.sun.jersey.guice.spi.container.servlet.GuiceContainer;
 import org.eclipse.jetty.servlets.GzipFilter;
+import org.kairosdb.core.http.exceptionmapper.InvalidServerTypeExceptionMapper;
+import org.kairosdb.core.http.rest.FeaturesResource;
+import org.kairosdb.core.http.rest.MetadataResource;
 import org.kairosdb.core.http.rest.MetricsResource;
 
 import javax.ws.rs.core.MediaType;
@@ -44,6 +47,8 @@ public class WebServletModule extends JerseyServletModule
 
 		//Bind resource classes here
 		bind(MetricsResource.class).in(Scopes.SINGLETON);
+        bind(MetadataResource.class).in(Scopes.SINGLETON);
+		bind(FeaturesResource.class).in(Scopes.SINGLETON);
 
 		bind(GuiceContainer.class);
 
@@ -61,6 +66,7 @@ public class WebServletModule extends JerseyServletModule
 		bind(JacksonJsonProvider.class).in(Scopes.SINGLETON);
 		serve("/*").with(GuiceContainer.class);
 
-
+		//
+		bind(InvalidServerTypeExceptionMapper.class).in(Scopes.SINGLETON);
 	}
 }

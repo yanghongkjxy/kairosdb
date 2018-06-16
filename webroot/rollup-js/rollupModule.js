@@ -1,9 +1,11 @@
 var module = angular.module('rollupApp',
-        ['mgcrea.ngStrap',
-            'mgcrea.ngStrap.tooltip',
+        [
+            'mgcrea.ngStrap',
+            // 'mgcrea.ngStrap.tooltip',
             'ui.bootstrap.modal',
             'template/modal/backdrop.html',
-            'template/modal/window.html']);
+            'template/modal/window.html'
+        ]);
 
 module.directive('editable', function ($compile)
 {
@@ -11,21 +13,32 @@ module.directive('editable', function ($compile)
             '<span>' +
             '<input class="small-input" type="text" ' +
             '	ng-model="model"  ' +
+            '   ng-change="shorten()" ' +
             '	ng-blur="$parent.onBlur($parent.task)" ' +
             '	ng-show="edit" ' +
             '	my-blur="edit">' +
-            '</>' +
 
             '<a href="" ' +
             '	ng-show="!edit && !$parent.task.complex" ' +
             '	ng-click="onClick()" ' +
-            '	ng-class="model.indexOf(\'<\') == 0 ? \'gray\' : \'black\'">{{model}}</a>' +
+            '   title="{{model}}"' +
+            '	ng-class="short.indexOf(\'<\') == 0 ? \'gray\' : \'black\'">{{short}}</a>' +
 
-            '	<span ng-show="$parent.task.complex">{{model}}</span> ' +
+            '	<span ng-show="$parent.task.complex">{{short}}</span> ' +
             '</span>';
 
     var linker = function (scope, element, attributes)
     {
+        scope.$watch('model', function(newValue, oldValue, scope){
+            scope.short = scope.shorten();
+        });
+
+        scope.shorten = function()
+        {
+            var maxLength = 40;
+            // shorten the text and add ellipses on to the left side
+            return scope.model.length < maxLength ? scope.model : "..." + scope.model.substr(scope.model.length - maxLength);
+        };
 
         scope.onClick = function ()
         {
@@ -70,33 +83,43 @@ module.directive('autocompleteeditable', function ()
         replace: false,
         template: '<span>' +
         '<input ' +
-        'class="small-input"' +
-        'type="text"' +
-        'ng-show="edit"' +
-        'my-blur="edit"' +
-        'ng-blur="suggestSaveAs(task)"' +
-        'ng-model="task.metric_name"' +
-        'myblur="edit" spellcheck="false"' +
-        'bs-typeahead bs-options="metric for metric in suggestMetrics(task.metric_name)"' +
-        'placeholder="<metric name>"' +
-        'min-length="0"' +
-        'limit="METRIC_NAME_LIST_MAX_LENGTH"' +
-        'ng-change="targetBlur()"' +
-        'ng-blur="suggestSaveAs()"' +
-        'data-provide="typeahead"' +
-        'style="width:100%;"' +
-        'ng-focus autofocus>' +
-        '</>' +
+        '   class="small-input"' +
+        '   type="text"' +
+        '   ng-show="edit"' +
+        '   my-blur="edit"' +
+        '   ng-blur="suggestSaveAs(task)"' +
+        '   ng-model="task.metric_name"' +
+        '   myblur="edit" spellcheck="false"' +
+        '   bs-typeahead bs-options="metric for metric in suggestMetrics(task.metric_name)"' +
+        '   placeholder="<metric name>"' +
+        '   min-length="0"' +
+        '   limit="METRIC_NAME_LIST_MAX_LENGTH"' +
+        '   ng-change="shorten();targetBlur()"' +
+        '   ng-blur="suggestSaveAs()"' +
+        '   data-provide="typeahead"' +
+        '   style="width:100%;"' +
+        '   ng-focus autofocus>' +
 
         '<a href="" ' +
         '	ng-show="!edit && !task.complex" ' +
-        '	ng-class="task.metric_name.indexOf(\'<\') == 0 ? \'gray\' : \'black\'"' +
-        '>{{task.metric_name}}</a>' +
+        '	ng-class="short.indexOf(\'<\') == 0 ? \'gray\' : \'black\'"' +
+        '   title="{{task.metric_name}}"' +
+        '>{{short}}</a>' +
 
-        '<span ng-show="task.complex">{{task.metric_name}}</span> ' +
+        '<span ng-show="task.complex">{{short}}</span> ' +
         '</span>',
         link: function (scope, element, attrs)
         {
+            scope.$watch(attrs.model, function(newValue, oldValue, scope){
+                scope.short = scope.shorten();
+            });
+
+            scope.shorten = function()
+            {
+                var maxLength = 40;
+                // shorten the text and add ellipses on to the left side
+                return scope.task.metric_name.length < maxLength ? scope.task.metric_name : "..." + scope.task.metric_name.substr(scope.task.metric_name.length - maxLength);
+            };
             if (scope.task.complex) {
                 // Ignore complex tasks
                 return;
@@ -105,7 +128,6 @@ module.directive('autocompleteeditable', function ()
             scope.edit = false;
             element.bind('click', function ()
             {
-
                 inputField = element.find('input').get(0);
                 inputField = element.find('input').get(0);
                 inputField.style.width = element[0].parentElement.offsetWidth - 15 + "px";
@@ -186,34 +208,13 @@ module.directive('focusOnShow', function ($timeout)
     };
 });
 
-// This is needed by dynamically created elements. The regular tooltip mechanism
-// does not work for dynamic elements
-module.directive('bsTooltip', function ()
-{
-    return {
-        restrict: 'A',
-        link: function (scope, element, attrs)
-        {
-            $(element).hover(function ()
-            {
-                // on mouseenter
-                $(element).tooltip('show');
-            }, function ()
-            {
-                // on mouseleave
-                $(element).tooltip('hide');
-            });
-        }
-    };
-});
-
 module.directive('autocompleteWithButtons', function ($compile)
 {
     var template = '' +
             '<table width="100%">' +
             '		<tr>' +
-            '			<td>' +
-            '			<span ng-show="!model.edit" style="margin: 0 10px 0 0">{{model.group_by_values}}</span>' +
+            '			<td style="padding-right: 10px">' +
+            '			<span ng-show="!model.edit">{{model.group_by_values}}</span>' +
             '			<input type="text" style="width:85px;"' +
             '               class="small-input"' +
             '				focus-on-show ' +
@@ -227,8 +228,8 @@ module.directive('autocompleteWithButtons', function ($compile)
             '				ng-show="model.edit"' +
             '			/>' +
             '			</td>' +
-            '			<td width="10%">' +
-            '				<a href="#" class="btn-sm btn-circle text-right" style="margin-left:1px; margin-right:5px;"' +
+            '			<td style="width:20%; vertical-align:top; text-align:right; margin-left: 5px; margin-right: 5px">' +
+            '				<a href="#" class="btn-sm btn-circle text-right" style="padding:0"' +
             '					ng-click="model.edit = true"' +
             '					ng-show="!model.edit && !model.complex">' +
             '					<span class="glyphicon glyphicon-plus shift-1-up"></span>' +
@@ -238,8 +239,8 @@ module.directive('autocompleteWithButtons', function ($compile)
             '					ng-show="model.edit">' +
             '				<span class="glyphicon glyphicon-ok text-success"></span></a>' +
             '			</td>' +
-            '			<td width="10%">' +
-            '				<a href="#" class="btn-sm btn-circle" style="margin-left:1px; margin-right:1px;"' +
+            '			<td width="10%" style="vertical-align:top;">' +
+            '				<a href="#" class="btn-sm btn-circle" style="padding:0; margin-left:1px; margin-right:1px;"' +
             '					ng-click="removeGroupValues(model);onBlur(model)"' +
             '					ng-show="model.group_by_values.length > 0 && !model.edit">' +
             '				<span class="glyphicon glyphicon-remove text-danger"></span></a>' +
@@ -301,7 +302,7 @@ module.directive('autocompleteTags', function ($compile)
             '<table width="100%">' +
             '		<tr>' +
             '			<td>' +
-            '			<table ng-show="!model.tagEdit"> ' +
+            '			<table ng-show="!model.tagEdit" style="margin: 0 10px 0 0"> ' +
             '				<tr ng-repeat="(tag, value) in model.tags"> ' +
             '				<td> ' +
             '					{{tag}}=<span ng-repeat="val in value">{{val}}{{$last ? "" : ", "}}</span>' +
@@ -334,26 +335,32 @@ module.directive('autocompleteTags', function ($compile)
             '				ng-show="model.tagEdit"' +
             '			/>' +
             '			</td>' +
-            '			<td width="10%" valign="top">' +
-            '				<a href="#" class="btn-sm btn-circle text-right" style="margin-left:1px; margin-right:5px;"' +
+            '			<td style="vertical-align: top">' +
+            '				<a href="#" class="btn-sm btn-circle text-right" ' +
+            '                   style="padding:0"' +
             '					ng-click="model.tagEdit = true"' +
             '					ng-show="!model.tagEdit && !model.complex">' +
             '					<span class="glyphicon glyphicon-plus shift-1-up"></span>' +
             '				</a>' +
-            '				<a href="#" class="btn-sm btn-circle" style="margin-right:10px;"' +
+            '				<a href="#" class="btn-sm btn-circle" ' +
+            '                   style="padding:0"' +
             '					ng-click="setTag(model);onBlur(model)"' +
             '					ng-show="model.tagEdit">' +
             '				<span class="glyphicon glyphicon-ok text-success"></span></a>' +
             '			</td>' +
-            '			<td width="10%" valign="top">' +
-            '				<a href="#" class="btn-sm btn-circle" style="margin-left:1px; margin-right:1px;"' +
+            '			<td style="vertical-align: top">' +
+            '				<a href="#" class="btn-sm btn-circle" ' +
+            '                   style="padding:0"' +
             '					ng-click="removeTag(model);onBlur(model)"' +
             '					ng-show="model.tags && !model.tagEdit && !model.complex">' +
-            '				<span class="glyphicon glyphicon-remove text-danger"></span></a>' +
-            '					<a href="#" class="btn-sm btn-circle" style="margin-left:1px; margin-right:1px;"' +
+            '				    <span class="glyphicon glyphicon-remove text-danger"></span>' +
+            '               </a>' +
+            '				<a href="#" class="btn-sm btn-circle" ' +
+            '                       style="padding:0"' +
             '						ng-click="cancelTagValues(model)"' +
             '						ng-show="model.tagEdit">' +
-            '				<span class="glyphicon glyphicon-remove-sign text-danger"></span></a>' +
+            '				    <span class="glyphicon glyphicon-remove-sign text-danger"></span>' +
+            '               </a>' +
             '			</td>' +
             '		</tr>' +
             '</table>';
@@ -419,7 +426,13 @@ module.directive('aggregator', function ($compile)
             html += '<table width="250px">';
             html += '<tr>';
             html += '	<td><aggregatornamedropdown agg="scope.agg.name" descriptors="scope.descriptors"></aggregatornamedropdown>';
-            html += '       <aggregatorproperties agg="scope.agg" descriptors="scope.descriptors">';
+            html += '       <table style="padding: 0">';
+            html += '           <tr>';
+            html += '               <td style="padding-left: 20px">';
+            html += '                   <aggregatorproperties agg="scope.agg" descriptors="scope.descriptors">';
+            html += '               </td>';
+            html += '           </tr>';
+            html += '       </table>';
             html += '   </td>';
             html += '   <td width="10%" valign="top">';
             html += '		<a href="#" class="btn-sm btn-circle" style="margin-right:10px;"';
@@ -474,8 +487,9 @@ module.directive('aggregatornamedropdown', function ($compile)
             html += '	</button>';
             html += '	<ul class="dropdown-menu" aria-labelledby="aggregatorDropdown">';
             html += '   <li ng-repeat="descriptor in descriptors">';
-			html += '       <a href="#" ng-click="setName(agg, descriptor.name, descriptors)"' +
-                    '           title="{{descriptor.description}}">';
+            html += '       <a href="#" ng-click="setName(agg, descriptor.name, descriptors)"';
+            html += '           title="{{descriptor.description}}" bs-tooltip';
+            html += '       >';
             html += '           {{ descriptor.name }}';
             html += '       </a>';
             html += '   </li>';
@@ -515,54 +529,13 @@ module.directive('aggregatorproperties', function ($compile)
                 html = '';
                 _.each(scope.descriptors, function (descriptor)
                 {
-                    if (descriptor.name == scope.agg.name) {
+                    if (descriptor.name === scope.agg.name) {
                         _.each(descriptor.properties, function (property)
                         {
-                            if (property.type == 'duration') {
-                                html += "<input  class='small-input' type='text' style='width:30px' ng-model='agg.sampling.value'>";
-                                html += "<samplingunitdropdown></samplingunitdropdown>";
+                            if (html.length > 0) {
+                                html += "<br/>";
                             }
-                            else if (property.type == 'boolean') {
-                                html += "<span>" + property.name + "</span> ";
-                                html += "<input type='checkbox' ng-model='agg." + property.name + "'>";
-                            }
-                            else if (property.type == 'double') {
-                                scope.agg[property.name] = 1;
-                                html += "<span>" + property.name + "</span> ";
-                                html += "<input  class='small-input' type='text' style='width:30px' ng-model='agg." + property.name + "'>";
-                            }
-                            else if (property.type == 'integer') {
-                                html += "<span>" + property.name + "</span> ";
-                                html += "<input  class='small-input' type='text' style='width:30px' ng-model='agg." + property.name + "'>";
-                            }
-                            else if (property.type == 'string') {
-                                html += "<span>" + property.name + "</span> ";
-                                html += "<input class='small-input' type='text' style='width:80px' ng-model='agg." + property.name + "'>";
-                            }
-                            else if (property.type == 'timeUnit') {
-                                html += "<samplingunitdropdown></samplingunitdropdown>";
-                            }
-                            else if (property.type == 'enum') {
-                                // todo how to make this a directive?
-                                html += "<span>" + property.name + "</span> ";
-                                scope.values = property.values;
-                                scope.agg[property.name] = scope.values[0];
-                                html += '<div class="dropdown" style="display:inline-block">';
-                                html += '	<button class="btn btn-default dropdown-toggle" type="button" ' +
-                                        'id="aggregatorDropdown" data-toggle="dropdown" ' +
-                                        'aria-haspopup="true" aria-expanded="true">';
-                                html += '       {{ agg.' + [property.name] + ' }}';
-                                html += '		<span class="caret"></span>';
-                                html += '	</button>';
-                                html += '	<ul class="dropdown-menu" aria-labelledby="aggregatorDropdown">';
-                                html += '   <li ng-repeat="unit in values">';
-                                html += '       <a href="#" ng-click="agg.' + [property.name] + '=unit">';
-                                html += '           {{ unit }}';
-                                html += '       <a>';
-                                html += '   </li>';
-                                html += '	</ul>';
-                                html += '</div>';
-                            }
+                            html += scope.getHtml(property);
                         });
                     }
                 });
@@ -581,44 +554,98 @@ module.directive('aggregatorproperties', function ($compile)
                 scope.renderHtml();
             });
 
+            scope.getValue = function(obj, path)
+            {
+                path = path.split('.');
+                for(var i = 0; i < path.length; i++){
+                    if (!obj[path[i]])
+                    {
+                        return null;
+                    }
+                    obj = obj[path[i]];
+                }
+                return obj;
+            };
+
+            scope.setValue = function (obj, path, value)
+            {
+                path = path.split('.');
+                for(var i = 0; i < path.length - 1; i++){
+                    if (!obj[path[i]])
+                    {
+                        obj[path[i]] = {}; // create object if doesn't exist
+                    }
+                    obj = obj[path[i]];
+                }
+                obj[path[i]] = value;
+            };
+
+            scope.setDefaultValue = function(modelName, defaultValue)
+            {
+                var value = scope.getValue(scope, modelName);
+                if (value === null)
+                {
+                    scope.setValue(scope, modelName, defaultValue);
+                }
+            };
+
+            scope.getHtml = function(property, parentName) {
+                var name = parentName ? parentName + "." + property.name : property.name;
+                var html = "";
+                var modelName = 'agg.' + name;
+                if (property.type === 'boolean') {
+                    scope.setDefaultValue(modelName, property.defaultValue === "true");
+                    html += "<span>" + property.name + "</span> ";
+                    html += "<input name='" + modelName + "' type='checkbox' ng-model='" + modelName + "' >";
+                }
+                else if (property.type === 'double') {
+                    scope.setDefaultValue(modelName, property.defaultValue);
+                    html += "<span>" + property.name + "</span> ";
+                    html += "<input  class='small-input' type='text' ng-model='" + modelName + "' style='width:30px'>";
+                }
+                else if (property.type === 'int' || property.type === 'long') {
+                    scope.setDefaultValue(modelName, property.defaultValue);
+                    html += "<span>" + property.name + "</span> ";
+                    html += "<input name='" + modelName + "' class='small-input' type='text' ng-model='" + modelName + "' style='width:30px'>";
+                }
+                else if (property.type === 'String') {
+                    scope.setDefaultValue(modelName, property.defaultValue);
+                    html += "<span>" + property.name + "</span> ";
+                    html += "<input class='small-input' type='text' ng-model='" + modelName + "' style='width:90px' ng-model='agg." + property.name + "'>";
+                }
+                else if (property.type === "Object") {
+                    _.each(property.properties, function (subProperty) {
+                        html += scope.getHtml(subProperty, property.name);
+                    });
+                }
+                else if (property.type === 'enum') {
+                    scope.values = property.options;
+                    scope.setDefaultValue(modelName, property.defaultValue);
+                    html += "<span>" + property.name + "</span> ";
+                    html += '<div class="dropdown" style="display:inline-block">';
+                    html += '	<button class="btn btn-default dropdown-toggle" type="button" ' +
+                            'id="aggregatorDropdown" data-toggle="dropdown" ' +
+                            'aria-haspopup="true" aria-expanded="true" style="font-size: 11px;">';
+                    html += '       {{ ' + modelName + ' }}';
+                    html += '		<span class="caret"></span>';
+                    html += '	</button>';
+                    html += '	<ul class="dropdown-menu" aria-labelledby="aggregatorDropdown">';
+                    html += '   <li ng-repeat="value in values">';
+                    html += '       <a href="#" ng-click="' + modelName + '=value" style="font-size: 11px;">{{ value }}</a>';
+                    html += '   </li>';
+                    html += '	</ul>';
+                    html += '</div>';
+                }
+                else {
+                    scope.$parent.alert("Invalid aggregator property type. Property name: '" +
+                            property.name + "'. Type: '" + property.type + "'.");
+                }
+
+                return html;
+            };
+
+
             scope.renderHtml();
-        }
-    }
-});
-
-module.directive('samplingunitdropdown', function ($compile)
-{
-    return {
-        link: function (scope, element, attributes)
-        {
-            if (!scope.agg.sampling)
-            {
-                scope.agg.sampling = scope.$parent.DEFAULT_SAMPLING;
-            }
-            var html = '';
-            html += '<div class="dropdown" style="display:inline-block">';
-            html += '	<button class="btn btn-default dropdown-toggle" ' +
-                    'type="button" id="aggregatorDropdown" data-toggle="dropdown" ' +
-                    'aria-haspopup="true" aria-expanded="true">';
-            html += '       {{ agg.sampling.unit }}';
-            html += '		<span class="caret"></span>';
-            html += '	</button>';
-            html += '	<ul class="dropdown-menu" aria-labelledby="aggregatorDropdown">';
-            html += '   <li ng-repeat="unit in units">';
-            html += '       <a href="#" ng-click="setUnit(agg, unit)">';
-            html += '           {{ unit }}';
-            html += '       </a>';
-            html += '   </li>';
-            html += '	</ul>';
-            html += '</div>';
-
-            element.append(html);
-            $compile(element.contents())(scope);
-
-            scope.setUnit = function (agg, unit)
-            {
-                agg.sampling.unit = unit
-            }
         }
     }
 });
